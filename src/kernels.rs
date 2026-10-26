@@ -6,7 +6,7 @@
 //! versions for f32/bf16 on x86-64, and portable scalar versions that the
 //! tests use as the reference.
 
-use crate::quant::{ActQ8, BlockQ4, BlockQ8, QK, bf16_to_f32, f16_to_f32, f16_to_f32_fast};
+use crate::quant::{ActQ8, BlockQ4, BlockQ8, QK, bf16_to_f32, f16_to_f32};
 
 pub mod scalar {
     use super::*;
@@ -70,6 +70,7 @@ pub mod scalar {
 #[cfg(target_arch = "aarch64")]
 mod neon {
     use super::*;
+    use crate::quant::f16_to_f32_fast;
     use std::arch::aarch64::*;
 
     #[inline(always)]
@@ -270,16 +271,10 @@ fn simd_f32() -> bool {
     }
 }
 
+#[cfg(target_arch = "aarch64")]
 fn simd_int8() -> bool {
-    #[cfg(target_arch = "aarch64")]
-    {
-        static OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        *OK.get_or_init(neon::has_dotprod)
-    }
-    #[cfg(not(target_arch = "aarch64"))]
-    {
-        false
-    }
+    static OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *OK.get_or_init(neon::has_dotprod)
 }
 
 /// Set WICK_SCALAR=1 to force the portable kernels (for testing them).
@@ -309,16 +304,16 @@ pub fn dot_bf16_n<const R: usize>(w: &[u16], xs: [&[f32]; R]) -> [f32; R] {
 }
 
 pub fn dot_q8_n<const R: usize>(w: &[BlockQ8], xs: [&[ActQ8]; R]) -> [f32; R] {
+    #[cfg(target_arch = "aarch64")]
     if simd_int8() && !forced_scalar() {
-        #[cfg(target_arch = "aarch64")]
         return unsafe { neon::dot_q8_n(w, xs) };
     }
     xs.map(|x| scalar::dot_q8(w, x))
 }
 
 pub fn dot_q4_n<const R: usize>(w: &[BlockQ4], xs: [&[ActQ8]; R]) -> [f32; R] {
+    #[cfg(target_arch = "aarch64")]
     if simd_int8() && !forced_scalar() {
-        #[cfg(target_arch = "aarch64")]
         return unsafe { neon::dot_q4_n(w, xs) };
     }
     xs.map(|x| scalar::dot_q4(w, x))
