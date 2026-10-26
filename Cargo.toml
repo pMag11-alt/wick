@@ -1,0 +1,21 @@
+[package]
+name = "wick"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+description = "Run Llama and Qwen language models on the CPU: a dependency-free inference engine with its own tokenizer, SIMD kernels, quantization and an OpenAI-compatible server"
+license = "MIT"
+repository = "https://github.com/pMag11-alt/wick"
+readme = "README.md"
+keywords = ["llm", "inference", "transformer", "quantization", "simd"]
+categories = ["science", "command-line-utilities"]
+
+[dependencies]
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+debug = "line-tables-only"
+
+[profile.test]
+opt-level = 2

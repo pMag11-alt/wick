@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: No dependencies
+        run: test "$(cargo tree --prefix none --edges normal | wc -l)" -eq 1
+      - run: cargo fmt --check
+      - run: cargo clippy --release --all-targets -- -D warnings
+      - name: Cache Hugging Face downloads
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: hf-models-v1
+      - name: Download SmolLM2-135M and the other models' tokenizers
+        run: |
+          scripts/download.sh HuggingFaceTB/SmolLM2-135M-Instruct
+          for m in Qwen/Qwen2.5-0.5B-Instruct Qwen/Qwen3-0.6B TinyLlama/TinyLlama-1.1B-Chat-v1.0; do
+            scripts/download.sh "$m" --tokenizer-only
+          done
+      - name: Tests (SIMD kernels)
+        run: cargo test --release
+      - name: Tests (portable scalar kernels)
+        run: cargo test --release
+        env:
+          WICK_SCALAR: "1"
+      - name: CLI smoke test
+        run: |
+          out=$(./target/release/wick run models/SmolLM2-135M-Instruct -p "What is the capital of France?" -t 0 -n 16 -q q8)
+          echo "$out"
+          echo "$out" | grep -q Paris
